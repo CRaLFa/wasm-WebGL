@@ -1,4 +1,4 @@
-# wasm-vanilla-webgl
+# wasm-WebGL
 
 WebGL by WebAssembly written in Rust
 
