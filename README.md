@@ -9,7 +9,6 @@ WebGL by WebAssembly written in Rust
 ## Usage
 
 ```
-$ npm ci
-$ npm run wasm
+$ npm i
 $ npm run dev
 ```
