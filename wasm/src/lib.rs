@@ -20,36 +20,31 @@ pub fn start() -> Result<(), JsValue> {
     let program = create_program(&gl)?;
     gl.use_program(Some(&program));
 
-    const VERTEX_COUNT: i32 = 6;
-
     let vertices: &[f32] = &[
         -0.5,  0.5, 0.0,
-        -0.5, -0.5, 0.0,
          0.5,  0.5, 0.0,
         -0.5, -0.5, 0.0,
          0.5, -0.5, 0.0,
-         0.5,  0.5, 0.0,
     ];
     let colors: &[f32] = &[
         1.0, 0.0, 0.0, 1.0,
         0.0, 1.0, 0.0, 1.0,
         0.0, 0.0, 1.0, 1.0,
-        0.0, 1.0, 0.0, 1.0,
         0.0, 0.0, 0.0, 1.0,
-        0.0, 0.0, 1.0, 1.0,
     ];
-    // let indices: &[u16] = &[
-
-    // ];
+    let indices: &[u16] = &[
+        0, 1, 2,
+        1, 2, 3,
+    ];
 
     let vbo_data = &[vertices, colors];
     let locations = &[0, 1];
-    let strides = &[0, 0];
+    let vertex_count = vertices.len() as i32 / 3;
 
-    let vao = create_vao(&gl, vbo_data, locations, strides, None, VERTEX_COUNT)?;
+    let vao = create_vao(&gl, vbo_data, locations, indices, vertex_count)?;
     gl.bind_vertex_array(Some(&vao));
 
-    draw(&gl, &canvas, VERTEX_COUNT);
+    draw(&gl, &canvas, indices.len() as i32);
 
     Ok(())
 }
@@ -90,8 +85,7 @@ fn create_vao(
     gl: &GL,
     vbo_data: &[&[f32]],
     locations: &[u32],
-    strides: &[i32],
-    ibo_data: Option<&[u16]>,
+    ibo_data: &[u16],
     vertex_count: i32,
 ) -> Result<WebGlVertexArrayObject, String> {
     let vao = gl.create_vertex_array().ok_or("Failed to create vertex array object")?;
@@ -106,19 +100,14 @@ fn create_vao(
         }
         gl.enable_vertex_attrib_array(locations[i]);
         let size = vbo_data[i].len() as i32 / vertex_count;
-        gl.vertex_attrib_pointer_with_i32(locations[i], size, GL::FLOAT, false, strides[i], 0);
+        gl.vertex_attrib_pointer_with_i32(locations[i], size, GL::FLOAT, false, 0, 0);
     }
 
-    match ibo_data {
-        Some(data) => {
-            let ibo = gl.create_buffer().ok_or("Failed to create buffer")?;
-            gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ibo));
-            unsafe {
-                let view = js_sys::Uint16Array::view(data);
-                gl.buffer_data_with_array_buffer_view(GL::ELEMENT_ARRAY_BUFFER, &view, GL::STATIC_DRAW);
-            }
-        },
-        None => {},
+    let ibo = gl.create_buffer().ok_or("Failed to create buffer")?;
+    gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ibo));
+    unsafe {
+        let view = js_sys::Uint16Array::view(ibo_data);
+        gl.buffer_data_with_array_buffer_view(GL::ELEMENT_ARRAY_BUFFER, &view, GL::STATIC_DRAW);
     }
 
     gl.bind_vertex_array(None);
@@ -126,12 +115,12 @@ fn create_vao(
     Ok(vao)
 }
 
-fn draw(gl: &GL, canvas: &HtmlCanvasElement, vertex_count: i32) {
+fn draw(gl: &GL, canvas: &HtmlCanvasElement, index_count: i32) {
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear(GL::COLOR_BUFFER_BIT);
 
     gl.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
 
-    gl.draw_arrays(GL::TRIANGLES, 0, vertex_count);
+    gl.draw_elements_with_i32(GL::TRIANGLES, index_count, GL::UNSIGNED_SHORT, 0);
     gl.flush();
 }
