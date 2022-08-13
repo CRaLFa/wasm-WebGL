@@ -1,8 +1,12 @@
+extern crate nalgebra_glm as glm;
+
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::f32::consts;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::WebGl2RenderingContext as GL;
 use web_sys::*;
-use glam::*;
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
@@ -12,8 +16,8 @@ pub fn start() -> Result<(), JsValue> {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document.get_element_by_id("canvas").ok_or("canvas not found")?
         .dyn_into::<HtmlCanvasElement>()?;
-    canvas.set_width(768);
-    canvas.set_height(768);
+    canvas.set_width(512);
+    canvas.set_height(512);
 
     let gl = canvas.get_context("webgl2")?.unwrap().dyn_into::<GL>()?;
 
@@ -44,7 +48,24 @@ pub fn start() -> Result<(), JsValue> {
     let vao = create_vao(&gl, vbo_data, locations, indices, vertex_count)?;
     gl.bind_vertex_array(Some(&vao));
 
-    draw(&gl, &canvas, indices.len() as i32);
+    let mvp_location = gl.get_uniform_location(&program, "mvpMatrix").ok_or("Failed to get uniform location")?;
+
+    gl.enable(GL::DEPTH_TEST);
+    // gl.enable(GL::CULL_FACE);
+    gl.depth_func(GL::LEQUAL);
+
+    let index_count = indices.len() as i32;
+    let mut frame_count = 0;
+
+    let closure = Rc::new(RefCell::new(None));
+    let clone = closure.clone();
+    *clone.borrow_mut() = Some(Closure::<dyn FnMut()>::new(move || {
+        frame_count += 1;
+        set_mvp_matrix(&gl, &mvp_location, &canvas, frame_count);
+        draw(&gl, index_count);
+        request_animation_frame(closure.borrow().as_ref().unwrap());
+    }));
+    request_animation_frame(clone.borrow().as_ref().unwrap());
 
     Ok(())
 }
@@ -115,12 +136,44 @@ fn create_vao(
     Ok(vao)
 }
 
-fn draw(gl: &GL, canvas: &HtmlCanvasElement, index_count: i32) {
-    gl.clear_color(0.0, 0.0, 0.0, 1.0);
-    gl.clear(GL::COLOR_BUFFER_BIT);
+fn set_mvp_matrix(
+    gl: &GL,
+    location: &WebGlUniformLocation,
+    canvas: &HtmlCanvasElement,
+    frame_count: i32
+) {
+    let radians = (frame_count % 360) as f32 * consts::PI / 180.0;
+    let model_matrix = glm::rotate_y(&glm::Mat4::identity(), radians);
 
-    gl.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
+    let eye = glm::Vec3::new(0.0, 0.0, 3.0);
+    let center = glm::Vec3::new(0.0, 0.0, 0.0);
+    let up = glm::Vec3::new(0.0, 1.0, 0.0);
+    let view_matrix = glm::look_at(&eye, &center, &up);
+
+    let aspect = canvas.width() as f32 / canvas.height() as f32;
+    let fovy = 45.0 * consts::PI / 180.0;
+    let near = 0.1;
+    let far = 10.0;
+    let projection_matrix = glm::perspective(aspect, fovy, near, far);
+
+    let mvp_matrix = projection_matrix * view_matrix * model_matrix;
+    let mvp_arrays: [[f32; 4]; 4] = mvp_matrix.into();
+    let mvp_matrices = mvp_arrays.iter().flat_map(|a| *a).collect::<Vec<_>>();
+
+    gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(Some(location), false, &mvp_matrices, 0, 0);
+}
+
+fn draw(gl: &GL, index_count: i32) {
+    gl.clear_color(0.0, 0.0, 0.0, 1.0);
+    gl.clear_depth(1.0);
+    gl.clear(GL::COLOR_BUFFER_BIT | GL::DEPTH_BUFFER_BIT);
 
     gl.draw_elements_with_i32(GL::TRIANGLES, index_count, GL::UNSIGNED_SHORT, 0);
     gl.flush();
+}
+
+fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+    let window = web_sys::window().unwrap();
+    window.request_animation_frame(f.as_ref().unchecked_ref())
+        .expect("Failed to register callback for 'requestAnimationFrame()'");
 }
