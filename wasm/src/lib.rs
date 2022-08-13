@@ -10,14 +10,13 @@ use web_sys::*;
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
-    #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document.get_element_by_id("canvas").ok_or("canvas not found")?
         .dyn_into::<HtmlCanvasElement>()?;
-    canvas.set_width(512);
-    canvas.set_height(512);
+    canvas.set_width(768);
+    canvas.set_height(768);
 
     let gl = canvas.get_context("webgl2")?.unwrap().dyn_into::<GL>()?;
 
@@ -25,23 +24,53 @@ pub fn start() -> Result<(), JsValue> {
     gl.use_program(Some(&program));
 
     let vertices: &[f32] = &[
-        -0.5,  0.5, 0.0,
-         0.5,  0.5, 0.0,
-        -0.5, -0.5, 0.0,
-         0.5, -0.5, 0.0,
+        // 前面
+        -0.5, -0.5,  0.5,
+         0.5, -0.5,  0.5,
+         0.5,  0.5,  0.5,
+        -0.5,  0.5,  0.5,
+        // 背面
+        -0.5, -0.5, -0.5,
+        -0.5,  0.5, -0.5,
+         0.5,  0.5, -0.5,
+         0.5, -0.5, -0.5,
+        // 上面
+        -0.5,  0.5, -0.5,
+        -0.5,  0.5,  0.5,
+         0.5,  0.5,  0.5,
+         0.5,  0.5, -0.5,
+        // 下面
+        -0.5, -0.5, -0.5,
+         0.5, -0.5, -0.5,
+         0.5, -0.5,  0.5,
+        -0.5, -0.5,  0.5,
+        // 右面
+         0.5, -0.5, -0.5,
+         0.5,  0.5, -0.5,
+         0.5,  0.5,  0.5,
+         0.5, -0.5,  0.5,
+        // 左面
+        -0.5, -0.5, -0.5,
+        -0.5, -0.5,  0.5,
+        -0.5,  0.5,  0.5,
+        -0.5,  0.5, -0.5,
     ];
-    let colors: &[f32] = &[
+    let colors = [
         1.0, 0.0, 0.0, 1.0,
         0.0, 1.0, 0.0, 1.0,
         0.0, 0.0, 1.0, 1.0,
-        0.0, 0.0, 0.0, 1.0,
-    ];
+        1.0, 1.0, 0.0, 1.0,
+    ].repeat(6);
     let indices: &[u16] = &[
-        0, 1, 2,
-        1, 2, 3,
+        0,  1,  2,     0,  2,  3,
+        4,  5,  6,     4,  6,  7,
+        8,  9,  10,    8,  10, 11,
+        12, 13, 14,    12, 14, 15,
+        16, 17, 18,    16, 18, 19,
+        20, 21, 22,    20, 22, 23,
     ];
 
-    let vbo_data = &[vertices, colors];
+    let vbo_data = &[vertices, &colors];
     let locations = &[0, 1];
     let vertex_count = vertices.len() as i32 / 3;
 
@@ -51,8 +80,8 @@ pub fn start() -> Result<(), JsValue> {
     let mvp_location = gl.get_uniform_location(&program, "mvpMatrix").ok_or("Failed to get uniform location")?;
 
     gl.enable(GL::DEPTH_TEST);
-    // gl.enable(GL::CULL_FACE);
     gl.depth_func(GL::LEQUAL);
+    gl.enable(GL::CULL_FACE);
 
     let index_count = indices.len() as i32;
     let mut frame_count = 0;
@@ -140,10 +169,12 @@ fn set_mvp_matrix(
     gl: &GL,
     location: &WebGlUniformLocation,
     canvas: &HtmlCanvasElement,
-    frame_count: i32
+    frame_count: i32,
 ) {
     let radians = (frame_count % 360) as f32 * consts::PI / 180.0;
-    let model_matrix = glm::rotate_y(&glm::Mat4::identity(), radians);
+    let mut model_matrix = glm::rotate_x(&glm::Mat4::identity(), radians);
+    model_matrix = glm::rotate_y(&model_matrix, radians);
+    model_matrix = glm::rotate_z(&model_matrix, radians);
 
     let eye = glm::Vec3::new(0.0, 0.0, 3.0);
     let center = glm::Vec3::new(0.0, 0.0, 0.0);

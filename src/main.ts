@@ -1,3 +1,5 @@
 import init from '../wasm/pkg/webgl'
 
-init()
+(async () => {
+    await init()
+})()
