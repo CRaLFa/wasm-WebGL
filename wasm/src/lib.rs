@@ -88,13 +88,13 @@ pub fn start() -> Result<(), JsValue> {
 
     let closure = Rc::new(RefCell::new(None));
     let clone = closure.clone();
-    *clone.borrow_mut() = Some(Closure::<dyn FnMut()>::new(move || {
+    *clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(move || {
         frame_count += 1;
         set_mvp_matrix(&gl, &mvp_location, &canvas, frame_count);
         draw(&gl, index_count);
-        request_animation_frame(closure.borrow().as_ref().unwrap());
+        request_animation_frame(closure.borrow().as_ref().unwrap())
     }));
-    request_animation_frame(clone.borrow().as_ref().unwrap());
+    request_animation_frame(clone.borrow().as_ref().unwrap())?;
 
     Ok(())
 }
@@ -103,7 +103,7 @@ fn create_program(gl: &GL) -> Result<WebGlProgram, String> {
     let vertex_shader = create_shader(&gl, GL::VERTEX_SHADER, include_str!("shader/vertex.glsl"))?;
     let fragment_shader = create_shader(&gl, GL::FRAGMENT_SHADER, include_str!("shader/fragment.glsl"))?;
 
-    let program = gl.create_program().ok_or(String::from("Failed to create program object"))?;
+    let program = gl.create_program().ok_or("Failed to create program object")?;
     gl.attach_shader(&program, &vertex_shader);
     gl.attach_shader(&program, &fragment_shader);
     gl.link_program(&program);
@@ -118,7 +118,7 @@ fn create_program(gl: &GL) -> Result<WebGlProgram, String> {
 }
 
 fn create_shader(gl: &GL, shader_type: u32, source: &str) -> Result<WebGlShader, String> {
-    let shader = gl.create_shader(shader_type).ok_or(String::from("Failed to create shader object"))?;
+    let shader = gl.create_shader(shader_type).ok_or("Failed to create shader object")?;
     gl.shader_source(&shader, source);
     gl.compile_shader(&shader);
 
@@ -203,8 +203,7 @@ fn draw(gl: &GL, index_count: i32) {
     gl.flush();
 }
 
-fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+fn request_animation_frame(closure: &Closure<dyn FnMut() -> Result<i32, JsValue>>) -> Result<i32, JsValue> {
     let window = web_sys::window().unwrap();
-    window.request_animation_frame(f.as_ref().unchecked_ref())
-        .expect("Failed to register callback for 'requestAnimationFrame()'");
+    window.request_animation_frame(closure.as_ref().unchecked_ref())
 }
