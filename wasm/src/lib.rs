@@ -23,7 +23,7 @@ pub fn start() -> Result<(), JsValue> {
     let program = create_program(&gl)?;
     gl.use_program(Some(&program));
 
-    let vertices: &[f32] = &[
+    let vertices: Vec<f32> = vec![
         // 前面
         -0.5, -0.5,  0.5,
          0.5, -0.5,  0.5,
@@ -55,26 +55,27 @@ pub fn start() -> Result<(), JsValue> {
         -0.5,  0.5,  0.5,
         -0.5,  0.5, -0.5,
     ];
-    let colors = [
+
+    let colors: Vec<f32> = [
         1.0, 0.0, 0.0, 1.0,
         0.0, 1.0, 0.0, 1.0,
         0.0, 0.0, 1.0, 1.0,
         1.0, 1.0, 0.0, 1.0,
     ].repeat(6);
-    let indices: &[u16] = &[
-        0,  1,  2,     0,  2,  3,
-        4,  5,  6,     4,  6,  7,
-        8,  9,  10,    8,  10, 11,
-        12, 13, 14,    12, 14, 15,
-        16, 17, 18,    16, 18, 19,
-        20, 21, 22,    20, 22, 23,
-    ];
 
-    let vbo_data = &[vertices, &colors];
+    let vertex_indices: Vec<u16> = vec![
+        0, 1, 2,
+        0, 2, 3,
+    ];
+    let indices = vec![vertex_indices; 6].iter().enumerate()
+        .flat_map(|(i, v)| v.iter().map(move |u| u + 4 * i as u16))
+        .collect::<Vec<_>>();
+
+    let vbo_data: &[&[f32]] = &[&vertices, &colors];
     let locations = &[0, 1];
     let vertex_count = vertices.len() as i32 / 3;
 
-    let vao = create_vao(&gl, vbo_data, locations, indices, vertex_count)?;
+    let vao = create_vao(&gl, vbo_data, locations, &indices, vertex_count)?;
     gl.bind_vertex_array(Some(&vao));
 
     let mvp_location = gl.get_uniform_location(&program, "mvpMatrix").ok_or("Failed to get uniform location")?;
