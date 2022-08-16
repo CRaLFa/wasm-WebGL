@@ -1,8 +1,9 @@
 extern crate nalgebra_glm as glm;
 
+use std::collections::HashMap;
+use std::f32::consts;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::f32::consts;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::WebGl2RenderingContext as GL;
@@ -63,6 +64,10 @@ pub fn start() -> Result<(), JsValue> {
         1.0, 1.0, 0.0, 1.0,
     ].repeat(6);
 
+    let normals: Vec<f32> = vec![
+        // TODO
+    ];
+
     let vertex_indices: Vec<u16> = vec![
         0, 1, 2,
         0, 2, 3,
@@ -71,14 +76,14 @@ pub fn start() -> Result<(), JsValue> {
         .flat_map(|(i, v)| v.iter().map(move |u| u + 4 * i as u16))
         .collect::<Vec<_>>();
 
-    let vbo_data: &[&[f32]] = &[&vertices, &colors];
-    let locations = &[0, 1];
+    let vbo_data: &[&[f32]] = &[&vertices, &colors, &normals];
+    let locations = &[0, 1, 2];
     let vertex_count = vertices.len() as i32 / 3;
 
     let vao = create_vao(&gl, vbo_data, locations, &indices, vertex_count)?;
     gl.bind_vertex_array(Some(&vao));
 
-    let mvp_location = gl.get_uniform_location(&program, "mvpMatrix").ok_or("Failed to get uniform location")?;
+    let uniform_location_map = get_uniform_location_map(&gl, &program);
 
     gl.enable(GL::DEPTH_TEST);
     gl.depth_func(GL::LEQUAL);
@@ -91,7 +96,7 @@ pub fn start() -> Result<(), JsValue> {
     let clone = closure.clone();
     *clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(move || {
         frame_count += 1;
-        set_mvp_matrix(&gl, &mvp_location, &canvas, frame_count);
+        send_uniforms(&gl, &uniform_location_map, &canvas, frame_count);
         draw(&gl, index_count);
         request_animation_frame(closure.borrow().as_ref().unwrap())
     }));
@@ -166,9 +171,25 @@ fn create_vao(
     Ok(vao)
 }
 
-fn set_mvp_matrix(
+fn get_uniform_location_map(gl: &GL, program: &WebGlProgram) -> HashMap<String, WebGlUniformLocation> {
+    let uniforms = vec![
+        "mvpMatrix",
+        "invMatrix",
+        "lightDirection",
+        "eyeDirection",
+    ];
+    let mut map = HashMap::new();
+
+    uniforms.iter().for_each(|&u| {
+        map.insert(u.to_string(), gl.get_uniform_location(&program, u).expect("Failed to get uniform location"));
+    });
+
+    map
+}
+
+fn send_uniforms(
     gl: &GL,
-    location: &WebGlUniformLocation,
+    location_map: &HashMap<String, WebGlUniformLocation>,
     canvas: &HtmlCanvasElement,
     frame_count: i32,
 ) {
@@ -189,10 +210,20 @@ fn set_mvp_matrix(
     let projection_matrix = glm::perspective(aspect, fovy, near, far);
 
     let mvp_matrix = projection_matrix * view_matrix * model_matrix;
-    let mvp_arrays: [[f32; 4]; 4] = mvp_matrix.into();
-    let mvp_matrices = mvp_arrays.iter().flat_map(|a| *a).collect::<Vec<_>>();
+    gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
+        Some(location_map.get("mvpMatrix").unwrap()), false, &mat4_to_vec(mvp_matrix), 0, 0);
 
-    gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(Some(location), false, &mvp_matrices, 0, 0);
+    let inv_matrix = glm::inverse(&model_matrix);
+    gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
+        Some(location_map.get("invMatrix").unwrap()), false, &mat4_to_vec(inv_matrix), 0, 0);
+
+    let light_direction = glm::Vec3::new(1.0, 1.0, 1.0);
+    gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
+        Some(location_map.get("lightDirection").unwrap()), &vec3_to_vec(light_direction), 0, 0);
+
+    let eye_direction = eye - center;
+    gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
+        Some(location_map.get("eyeDirection").unwrap()), &vec3_to_vec(eye_direction), 0, 0);
 }
 
 fn draw(gl: &GL, index_count: i32) {
@@ -207,4 +238,14 @@ fn draw(gl: &GL, index_count: i32) {
 fn request_animation_frame(closure: &Closure<dyn FnMut() -> Result<i32, JsValue>>) -> Result<i32, JsValue> {
     let window = web_sys::window().unwrap();
     window.request_animation_frame(closure.as_ref().unchecked_ref())
+}
+
+fn mat4_to_vec(mat4: glm::Mat4) -> Vec<f32> {
+    let arrays: [[f32; 4]; 4] = mat4.into();
+    arrays.iter().flat_map(|&a| a).collect::<Vec<_>>()
+}
+
+fn vec3_to_vec(vec3: glm::Vec3) -> Vec<f32> {
+    let arrays: [[f32; 3]; 1] = vec3.into();
+    arrays[0].to_vec()
 }
