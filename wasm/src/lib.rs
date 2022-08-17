@@ -24,7 +24,7 @@ pub fn start() -> Result<(), JsValue> {
     let program = create_program(&gl)?;
     gl.use_program(Some(&program));
 
-    let vertices: Vec<f32> = vec![
+    let vertices = [
         // 前面
         -0.5, -0.5,  0.5,
          0.5, -0.5,  0.5,
@@ -57,22 +57,18 @@ pub fn start() -> Result<(), JsValue> {
         -0.5,  0.5, -0.5,
     ];
 
-    let colors: Vec<f32> = [
+    let colors = [
         1.0, 0.0, 0.0, 1.0,
         0.0, 1.0, 0.0, 1.0,
         0.0, 0.0, 1.0, 1.0,
         1.0, 1.0, 0.0, 1.0,
     ].repeat(6);
 
-    let normals: Vec<f32> = vec![
-        // TODO
-    ];
-
-    let vertex_indices: Vec<u16> = vec![
+    let vertex_indices = [
         0, 1, 2,
         0, 2, 3,
     ];
-    let indices = vec![vertex_indices; 6].iter().enumerate()
+    let indices = [vertex_indices; 6].iter().enumerate()
         .flat_map(|(i, v)| v.iter().map(move |u| u + 4 * i as u16))
         .collect::<Vec<_>>();
 
