@@ -64,6 +64,18 @@ pub fn start() -> Result<(), JsValue> {
         1.0, 1.0, 0.0, 1.0,
     ].repeat(6);
 
+    let surface_normals = [
+        [ 0.0,  0.0,  1.0 ],
+        [ 0.0,  0.0, -1.0 ],
+        [ 0.0,  1.0,  0.0 ],
+        [ 0.0, -1.0,  0.0 ],
+        [ 1.0,  0.0,  0.0 ],
+        [-1.0,  0.0,  0.0 ],
+    ];
+    let normals = surface_normals.iter()
+        .flat_map(|n| n.repeat(4))
+        .collect::<Vec<_>>();
+
     let vertex_indices = [
         0, 1, 2,
         0, 2, 3,
@@ -168,16 +180,17 @@ fn create_vao(
 }
 
 fn get_uniform_location_map(gl: &GL, program: &WebGlProgram) -> HashMap<String, WebGlUniformLocation> {
-    let uniforms = vec![
+    let uniforms = [
         "mvpMatrix",
         "invMatrix",
         "lightDirection",
         "eyeDirection",
+        "ambientColor",
     ];
     let mut map = HashMap::new();
 
     uniforms.iter().for_each(|&u| {
-        map.insert(u.to_string(), gl.get_uniform_location(&program, u).expect("Failed to get uniform location"));
+        map.insert(String::from(u), gl.get_uniform_location(&program, u).expect("Failed to get uniform location"));
     });
 
     map
@@ -220,6 +233,10 @@ fn send_uniforms(
     let eye_direction = eye - center;
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
         Some(location_map.get("eyeDirection").unwrap()), &vec3_to_vec(eye_direction), 0, 0);
+
+    let ambient_color = glm::Vec3::new(0.1, 0.1, 0.1);
+    gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
+        Some(location_map.get("ambientColor").unwrap()), &vec3_to_vec(ambient_color), 0, 0);
 }
 
 fn draw(gl: &GL, index_count: i32) {
