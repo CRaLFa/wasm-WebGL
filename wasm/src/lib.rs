@@ -57,11 +57,11 @@ pub fn start() -> Result<(), JsValue> {
         -0.5,  0.5, -0.5,
     ];
 
-    let colors = [
-        1.0, 0.0, 0.0, 1.0,
-        0.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 1.0, 1.0,
-        1.0, 1.0, 0.0, 1.0,
+    let coordinates = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0,
     ].repeat(6);
 
     let surface_normals = [
@@ -84,12 +84,15 @@ pub fn start() -> Result<(), JsValue> {
         .flat_map(|(i, v)| v.iter().map(move |u| u + 4 * i as u16))
         .collect::<Vec<_>>();
 
-    let vbo_data: &[&[f32]] = &[&vertices, &colors, &normals];
+    let vbo_data: &[&[f32]] = &[&vertices, &coordinates, &normals];
     let locations = &[0, 1, 2];
     let vertex_count = vertices.len() as i32 / 3;
 
     let vao = create_vao(&gl, vbo_data, locations, &indices, vertex_count)?;
     gl.bind_vertex_array(Some(&vao));
+
+    let texture = create_texture(&gl, "texture.png")?;
+    gl.bind_texture(GL::TEXTURE_2D, Some(&texture));
 
     let uniform_location_map = get_uniform_location_map(&gl, &program);
 
@@ -179,13 +182,47 @@ fn create_vao(
     Ok(vao)
 }
 
+fn create_texture(gl: &GL, source: &str) -> Result<Rc<WebGlTexture>, String> {
+    let gl_clone = Rc::new(gl.clone());
+
+    let img = Rc::new(HtmlImageElement::new().unwrap());
+    let img_clone = img.clone();
+
+    let texture = Rc::new(gl_clone.create_texture().ok_or("Failed to create texture")?);
+    let tex_clone = texture.clone();
+
+    let on_load_closure = Closure::once(move || -> Result<(), JsValue> {
+        gl_clone.bind_texture(GL::TEXTURE_2D, Some(&tex_clone));
+        gl_clone.tex_image_2d_with_u32_and_u32_and_html_image_element(
+            GL::TEXTURE_2D, 0, GL::RGBA as i32, GL::RGBA, GL::UNSIGNED_BYTE, &img_clone)?;
+        gl_clone.generate_mipmap(GL::TEXTURE_2D);
+
+        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MAG_FILTER, GL::LINEAR as i32);
+        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MIN_FILTER, GL::LINEAR as i32);
+        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_S, GL::REPEAT as i32);
+        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_T, GL::REPEAT as i32);
+
+        gl_clone.bind_texture(GL::TEXTURE_2D, None);
+        Ok(())
+    });
+
+    img.set_onload(Some(on_load_closure.as_ref().unchecked_ref()));
+    on_load_closure.forget();
+
+    img.set_src(source);
+
+    Ok(texture)
+}
+
 fn get_uniform_location_map(gl: &GL, program: &WebGlProgram) -> HashMap<String, WebGlUniformLocation> {
     let uniforms = [
+        "modelMatrix",
         "mvpMatrix",
-        "invMatrix",
-        "lightDirection",
-        "eyeDirection",
+        "normalMatrix",
+        "lightPosition",
+        "eyePosition",
         "ambientColor",
+        "sampler",
     ];
     let mut map = HashMap::new();
 
@@ -218,25 +255,30 @@ fn send_uniforms(
     let far = 10.0;
     let projection_matrix = glm::perspective(aspect, fovy, near, far);
 
+    gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
+        Some(location_map.get("modelMatrix").unwrap()), false, &mat4_to_vec(model_matrix), 0, 0);
+
     let mvp_matrix = projection_matrix * view_matrix * model_matrix;
     gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
         Some(location_map.get("mvpMatrix").unwrap()), false, &mat4_to_vec(mvp_matrix), 0, 0);
 
-    let inv_matrix = glm::inverse(&model_matrix);
+    let normal_matrix = glm::transpose(&glm::inverse(&model_matrix));
     gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("invMatrix").unwrap()), false, &mat4_to_vec(inv_matrix), 0, 0);
+        Some(location_map.get("normalMatrix").unwrap()), false, &mat4_to_vec(normal_matrix), 0, 0);
 
-    let light_direction = glm::Vec3::new(1.0, 1.0, 1.0);
+    let light_position = glm::Vec3::new(1.0, 1.0, 1.0);
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("lightDirection").unwrap()), &vec3_to_vec(light_direction), 0, 0);
+        Some(location_map.get("lightPosition").unwrap()), &vec3_to_vec(light_position), 0, 0);
 
-    let eye_direction = eye - center;
+    let eye_position = eye - center;
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("eyeDirection").unwrap()), &vec3_to_vec(eye_direction), 0, 0);
+        Some(location_map.get("eyePosition").unwrap()), &vec3_to_vec(eye_position), 0, 0);
 
     let ambient_color = glm::Vec3::new(0.1, 0.1, 0.1);
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
         Some(location_map.get("ambientColor").unwrap()), &vec3_to_vec(ambient_color), 0, 0);
+
+    gl.uniform1i(Some(location_map.get("sampler").unwrap()), 0);
 }
 
 fn draw(gl: &GL, index_count: i32) {

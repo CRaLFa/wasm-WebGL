@@ -2,23 +2,25 @@
 
 precision highp float;
 
-in vec4 vertexColor;
+in vec3 vertexPosition;
 in vec3 vertexNormal;
+in vec2 vertexCoord;
 
-uniform mat4 invMatrix;
-uniform vec3 lightDirection;
-uniform vec3 eyeDirection;
+uniform vec3 lightPosition;
+uniform vec3 eyePosition;
 uniform vec3 ambientColor;
+uniform sampler2D sampler;
 
 out vec4 fragmentColor;
 
 void main() {
-    vec3 invLight = normalize(invMatrix * vec4(lightDirection, 1.0)).xyz;
-    vec3 invEye = normalize(invMatrix * vec4(eyeDirection, 1.0)).xyz;
-    vec3 halfVector = normalize(invLight + invEye);
+    vec3 light = normalize(lightPosition - vertexPosition);
+    vec3 eye = normalize(vertexPosition - eyePosition);
+    vec3 reflection = normalize(reflect(eye, vertexNormal));
 
-    float diffuse = clamp(dot(invLight, vertexNormal), 0.1, 1.0);
-    float specular = pow(clamp(dot(halfVector, vertexNormal), 0.0, 1.0), 25.0);
+    float diffuse = max(dot(light, vertexNormal), 0.2);
+    float specular = pow(max(dot(light, reflection), 0.0), 25.0);
 
-    fragmentColor = vec4(vertexColor.rgb * diffuse + specular + ambientColor, vertexColor.a);
+    vec4 samplerColor = texture(sampler, vertexCoord);
+    fragmentColor = vec4(samplerColor.rgb * diffuse + specular + ambientColor, samplerColor.a);
 }
