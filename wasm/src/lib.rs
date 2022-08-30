@@ -4,13 +4,16 @@ use std::collections::HashMap;
 use std::f32::consts;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{ Context, Poll };
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::WebGl2RenderingContext as GL;
 use web_sys::*;
 
 #[wasm_bindgen(start)]
-pub fn start() -> Result<(), JsValue> {
+pub async fn start() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
     let document = web_sys::window().unwrap().document().unwrap();
@@ -57,13 +60,6 @@ pub fn start() -> Result<(), JsValue> {
         -0.5,  0.5, -0.5,
     ];
 
-    let coordinates = [
-        0.0, 0.0,
-        1.0, 0.0,
-        1.0, 1.0,
-        0.0, 1.0,
-    ].repeat(6);
-
     let surface_normals = [
         [ 0.0,  0.0,  1.0 ],
         [ 0.0,  0.0, -1.0 ],
@@ -76,6 +72,13 @@ pub fn start() -> Result<(), JsValue> {
         .flat_map(|n| n.repeat(4))
         .collect::<Vec<_>>();
 
+    let coordinates = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0,
+    ].repeat(6);
+
     let vertex_indices = [
         0, 1, 2,
         0, 2, 3,
@@ -84,14 +87,15 @@ pub fn start() -> Result<(), JsValue> {
         .flat_map(|(i, v)| v.iter().map(move |u| u + 4 * i as u16))
         .collect::<Vec<_>>();
 
-    let vbo_data: &[&[f32]] = &[&vertices, &coordinates, &normals];
+    let vbo_data: &[&[f32]] = &[&vertices, &normals, &coordinates];
     let locations = &[0, 1, 2];
     let vertex_count = vertices.len() as i32 / 3;
 
     let vao = create_vao(&gl, vbo_data, locations, &indices, vertex_count)?;
     gl.bind_vertex_array(Some(&vao));
 
-    let texture = create_texture(&gl, "texture.png")?;
+    let texture = create_texture(&gl, "texture.png").await?;
+    gl.active_texture(GL::TEXTURE0);
     gl.bind_texture(GL::TEXTURE_2D, Some(&texture));
 
     let uniform_location_map = get_uniform_location_map(&gl, &program);
@@ -182,34 +186,21 @@ fn create_vao(
     Ok(vao)
 }
 
-fn create_texture(gl: &GL, source: &str) -> Result<Rc<WebGlTexture>, String> {
-    let gl_clone = Rc::new(gl.clone());
+async fn create_texture(gl: &GL, path: &str) -> Result<WebGlTexture, JsValue> {
+    let texture = gl.create_texture().ok_or("Failed to create texture")?;
+    let img = ImageLoader::new(path).await?;
 
-    let img = Rc::new(HtmlImageElement::new().unwrap());
-    let img_clone = img.clone();
+    gl.bind_texture(GL::TEXTURE_2D, Some(&texture));
+    gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
+        GL::TEXTURE_2D, 0, GL::RGBA as i32, GL::RGBA, GL::UNSIGNED_BYTE, &img)?;
+    gl.generate_mipmap(GL::TEXTURE_2D);
 
-    let texture = Rc::new(gl_clone.create_texture().ok_or("Failed to create texture")?);
-    let tex_clone = texture.clone();
+    gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MAG_FILTER, GL::LINEAR as i32);
+    gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MIN_FILTER, GL::LINEAR as i32);
+    gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_S, GL::REPEAT as i32);
+    gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_T, GL::REPEAT as i32);
 
-    let on_load_closure = Closure::once(move || -> Result<(), JsValue> {
-        gl_clone.bind_texture(GL::TEXTURE_2D, Some(&tex_clone));
-        gl_clone.tex_image_2d_with_u32_and_u32_and_html_image_element(
-            GL::TEXTURE_2D, 0, GL::RGBA as i32, GL::RGBA, GL::UNSIGNED_BYTE, &img_clone)?;
-        gl_clone.generate_mipmap(GL::TEXTURE_2D);
-
-        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MAG_FILTER, GL::LINEAR as i32);
-        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MIN_FILTER, GL::LINEAR as i32);
-        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_S, GL::REPEAT as i32);
-        gl_clone.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_T, GL::REPEAT as i32);
-
-        gl_clone.bind_texture(GL::TEXTURE_2D, None);
-        Ok(())
-    });
-
-    img.set_onload(Some(on_load_closure.as_ref().unchecked_ref()));
-    on_load_closure.forget();
-
-    img.set_src(source);
+    gl.bind_texture(GL::TEXTURE_2D, None);
 
     Ok(texture)
 }
@@ -256,29 +247,29 @@ fn send_uniforms(
     let projection_matrix = glm::perspective(aspect, fovy, near, far);
 
     gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("modelMatrix").unwrap()), false, &mat4_to_vec(model_matrix), 0, 0);
+        location_map.get("modelMatrix"), false, &mat4_to_vec(model_matrix), 0, 0);
 
     let mvp_matrix = projection_matrix * view_matrix * model_matrix;
     gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("mvpMatrix").unwrap()), false, &mat4_to_vec(mvp_matrix), 0, 0);
+        location_map.get("mvpMatrix"), false, &mat4_to_vec(mvp_matrix), 0, 0);
 
     let normal_matrix = glm::transpose(&glm::inverse(&model_matrix));
     gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("normalMatrix").unwrap()), false, &mat4_to_vec(normal_matrix), 0, 0);
+        location_map.get("normalMatrix"), false, &mat4_to_vec(normal_matrix), 0, 0);
 
     let light_position = glm::Vec3::new(1.0, 1.0, 1.0);
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("lightPosition").unwrap()), &vec3_to_vec(light_position), 0, 0);
+        location_map.get("lightPosition"), &vec3_to_vec(light_position), 0, 0);
 
     let eye_position = eye - center;
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("eyePosition").unwrap()), &vec3_to_vec(eye_position), 0, 0);
+        location_map.get("eyePosition"), &vec3_to_vec(eye_position), 0, 0);
 
     let ambient_color = glm::Vec3::new(0.1, 0.1, 0.1);
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("ambientColor").unwrap()), &vec3_to_vec(ambient_color), 0, 0);
+        location_map.get("ambientColor"), &vec3_to_vec(ambient_color), 0, 0);
 
-    gl.uniform1i(Some(location_map.get("sampler").unwrap()), 0);
+    gl.uniform1i(location_map.get("sampler"), 0);
 }
 
 fn draw(gl: &GL, index_count: i32) {
@@ -303,4 +294,43 @@ fn mat4_to_vec(mat4: glm::Mat4) -> Vec<f32> {
 fn vec3_to_vec(vec3: glm::Vec3) -> Vec<f32> {
     let arrays: [[f32; 3]; 1] = vec3.into();
     arrays[0].to_vec()
+}
+
+struct ImageLoader {
+    image: Option<HtmlImageElement>,
+}
+
+impl ImageLoader {
+    fn new(path: &str) -> Self {
+        let img = HtmlImageElement::new().unwrap();
+        img.set_src(path);
+
+        Self {
+            image: Some(img),
+        }
+    }
+}
+
+impl Future for ImageLoader {
+    type Output = Result<HtmlImageElement, String>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match &self.image {
+            Some(image) => {
+                if image.complete() {
+                    Poll::Ready(Ok(self.image.take().unwrap()))
+                } else {
+                    let waker = cx.waker().clone();
+                    let on_load_closure = Closure::once(move || {
+                        waker.wake_by_ref();
+                    });
+                    image.set_onload(Some(on_load_closure.as_ref().unchecked_ref()));
+                    on_load_closure.forget();
+
+                    Poll::Pending
+                }
+            },
+            _ => Poll::Ready(Err(String::from("Failed to load image"))),
+        }
+    }
 }
