@@ -101,7 +101,7 @@ pub fn start() -> Result<(), JsValue> {
     let clone = closure.clone();
     *clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(move || {
         frame_count += 1;
-        set_mvp_matrix(&gl, &mvp_location, &canvas, frame_count);
+        send_mvp_matrix(&gl, &mvp_location, &canvas, frame_count);
         draw(&gl, index_count);
         request_animation_frame(closure.borrow().as_ref().unwrap())
     }));
@@ -176,7 +176,7 @@ fn create_vao(
     Ok(vao)
 }
 
-fn set_mvp_matrix(
+fn send_mvp_matrix(
     gl: &GL,
     location: &WebGlUniformLocation,
     canvas: &HtmlCanvasElement,
