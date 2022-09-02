@@ -1,12 +1,18 @@
 extern crate nalgebra_glm as glm;
 
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::f32::consts;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::WebGl2RenderingContext as GL;
-use web_sys::*;
+use std::{
+    cell::RefCell,
+    f32::consts,
+    rc::Rc,
+};
+use wasm_bindgen::{
+    prelude::*,
+    JsCast,
+};
+use web_sys::{
+    WebGl2RenderingContext as GL,
+    *,
+};
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
