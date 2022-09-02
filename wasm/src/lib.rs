@@ -12,13 +12,17 @@ use web_sys::*;
 pub fn start() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
-    let document = web_sys::window().unwrap().document().unwrap();
-    let canvas = document.get_element_by_id("canvas").ok_or("canvas not found")?
+    let document = web_sys::window().unwrap()
+        .document().unwrap();
+    let canvas = document.get_element_by_id("canvas")
+        .ok_or("canvas not found")?
         .dyn_into::<HtmlCanvasElement>()?;
     canvas.set_width(768);
     canvas.set_height(768);
 
-    let gl = canvas.get_context("webgl2")?.unwrap().dyn_into::<GL>()?;
+    let gl = canvas.get_context("webgl2")?
+        .ok_or("Failed to get WebGl2RenderingContext")?
+        .dyn_into::<GL>()?;
 
     let program = create_program(&gl)?;
     gl.use_program(Some(&program));
@@ -204,7 +208,9 @@ fn draw(gl: &GL, index_count: i32) {
     gl.flush();
 }
 
-fn request_animation_frame(closure: &Closure<dyn FnMut() -> Result<i32, JsValue>>) -> Result<i32, JsValue> {
+fn request_animation_frame(
+    closure: &Closure<dyn FnMut() -> Result<i32, JsValue>>
+) -> Result<i32, JsValue> {
     let window = web_sys::window().unwrap();
     window.request_animation_frame(closure.as_ref().unchecked_ref())
 }
