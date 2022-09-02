@@ -1,16 +1,22 @@
 extern crate nalgebra_glm as glm;
 
-use std::collections::HashMap;
-use std::f32::consts;
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{ Context, Poll };
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::WebGl2RenderingContext as GL;
-use web_sys::*;
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    f32::consts,
+    future::Future,
+    pin::Pin,
+    rc::Rc,
+    task::{ Context, Poll },
+};
+use wasm_bindgen::{
+    prelude::*,
+    JsCast,
+};
+use web_sys::{
+    WebGl2RenderingContext as GL,
+    *,
+};
 
 #[wasm_bindgen(start)]
 pub async fn start() -> Result<(), JsValue> {
