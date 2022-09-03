@@ -183,9 +183,8 @@ fn send_mvp_matrix(
     frame_count: i32,
 ) {
     let radians = (frame_count % 360) as f32 * consts::PI / 180.0;
-    let mut model_matrix = glm::rotate_x(&glm::Mat4::identity(), radians);
-    model_matrix = glm::rotate_y(&model_matrix, radians);
-    model_matrix = glm::rotate_z(&model_matrix, radians);
+    let axis = glm::Vec3::new(1.0, 1.0, 1.0);
+    let model_matrix = glm::rotate(&glm::Mat4::identity(), radians, &axis);
 
     let eye = glm::Vec3::new(0.0, 0.0, 3.0);
     let center = glm::Vec3::new(0.0, 0.0, 0.0);
