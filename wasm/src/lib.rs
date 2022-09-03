@@ -230,23 +230,23 @@ fn send_uniforms(
 
     let mvp_matrix = projection_matrix * view_matrix * model_matrix;
     gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("mvpMatrix").unwrap()), false, &mat4_to_vec(mvp_matrix), 0, 0);
+        location_map.get("mvpMatrix"), false, &mat4_to_vec(mvp_matrix), 0, 0);
 
     let inv_matrix = glm::inverse(&model_matrix);
     gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("invMatrix").unwrap()), false, &mat4_to_vec(inv_matrix), 0, 0);
+        location_map.get("invMatrix"), false, &mat4_to_vec(inv_matrix), 0, 0);
 
     let light_direction = glm::Vec3::new(1.0, 1.0, 1.0);
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("lightDirection").unwrap()), &vec3_to_vec(light_direction), 0, 0);
+        location_map.get("lightDirection"), &vec3_to_vec(light_direction), 0, 0);
 
     let eye_direction = eye - center;
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("eyeDirection").unwrap()), &vec3_to_vec(eye_direction), 0, 0);
+        location_map.get("eyeDirection"), &vec3_to_vec(eye_direction), 0, 0);
 
     let ambient_color = glm::Vec3::new(0.1, 0.1, 0.1);
     gl.uniform3fv_with_f32_array_and_src_offset_and_src_length(
-        Some(location_map.get("ambientColor").unwrap()), &vec3_to_vec(ambient_color), 0, 0);
+        location_map.get("ambientColor"), &vec3_to_vec(ambient_color), 0, 0);
 }
 
 fn draw(gl: &GL, index_count: i32) {
