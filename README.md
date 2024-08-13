@@ -1,6 +1,6 @@
 # wasm-WebGL
 
-WebGL by WebAssembly written in Rust
+WebGL powered by WebAssembly written in Rust
 
 <https://cralfa-webgl.netlify.app/>
 
